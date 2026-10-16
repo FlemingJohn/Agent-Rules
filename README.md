@@ -1,38 +1,16 @@
 # Agent Rules
 
+![Agent Rules](banner.svg)
+
 Rules for coding agents (Claude Code, Codex, Cursor, Copilot, Gemini CLI and
 others) so the code they write is modular, simple and easy to read.
 
 ---
 
-## What is here
-
-    core/               rules for every project
-      code-shape.md       small files, one thing per file, no comments
-      naming.md           plain names, no abbreviations
-      simple-logic.md     no clever code, no needless helpers
-      git.md              one file per commit, subject line only
-    languages/
-      python.md
-      typescript.md
-      javascript.md
-    databases/
-      sql.md              plain SQL for both databases
-      postgresql.md       only what differs in PostgreSQL
-      mysql.md            only what differs in MySQL
-    frameworks/
-      frontend/
-        react.md
-        nextjs.md
-      backend/
-        node.md
-        express.md
-        fastapi.md
-      ai/
-        langgraph.md
+## Which files a project needs
 
 Every project uses all of `core/`, plus its language, its database and its
-frameworks.
+frameworks. `AGENTS.md` is the index agents use to pick the right files.
 
 | Project | Files besides `core/` |
 |---|---|
@@ -47,34 +25,15 @@ frameworks.
 
 ## How to use it in a project
 
-**1. Copy the files you need** into the project, under `docs/agent-rules/`.
-For a FastAPI service:
-
-    docs/agent-rules/
-      core/code-shape.md
-      core/naming.md
-      core/simple-logic.md
-      core/git.md
-      languages/python.md
-      databases/sql.md
-      databases/postgresql.md
-      frameworks/backend/fastapi.md
+**1. Copy this whole repo** into the project as `agent-rules/`, including its
+`AGENTS.md` index.
 
 **2. Make `AGENTS.md`** at the project root. Most agent tools read this file.
 
 ```markdown
 # Rules
 
-Read and follow every file below before writing any code.
-
-@docs/agent-rules/core/code-shape.md
-@docs/agent-rules/core/naming.md
-@docs/agent-rules/core/simple-logic.md
-@docs/agent-rules/core/git.md
-@docs/agent-rules/languages/python.md
-@docs/agent-rules/databases/sql.md
-@docs/agent-rules/databases/postgresql.md
-@docs/agent-rules/frameworks/backend/fastapi.md
+Before writing any code, read `agent-rules/AGENTS.md` and follow it.
 ```
 
 **3. Make `CLAUDE.md`** at the project root, holding one line:
@@ -83,9 +42,11 @@ Read and follow every file below before writing any code.
 @AGENTS.md
 ```
 
-Claude Code reads `CLAUDE.md`, follows `@AGENTS.md`, and loads every file it
-lists. Other tools read `AGENTS.md` and open the listed files. The rules are
-written once and every agent sees the same ones.
+Claude Code reads `CLAUDE.md`, which loads `AGENTS.md`. Other tools read
+`AGENTS.md` directly. Either way, the agent reaches the index in
+`agent-rules/AGENTS.md`, reads the core files, and opens only the language,
+database and framework files that match the task. Unused rules never fill up
+its context.
 
 ---
 
