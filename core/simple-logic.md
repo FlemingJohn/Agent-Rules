@@ -11,8 +11,9 @@ agent opening it cold. Plain and a little longer beats clever and short.
    never nested.
 2. **No helper until it has two callers.** A function used once stays inline,
    unless the main function is too long without it.
-3. **No layer that only passes things along.** A function that only calls
-   another function with the same arguments is deleted.
+3. **No layers beyond the standard ones.** A backend has middleware, routes,
+   services and queries. A frontend has pages, components, hooks and
+   services. Never add a manager, wrapper or extra layer between them.
 4. **No code for later.** No options, flags, base classes or settings for
    something nobody needs yet.
 5. **Look up, do not branch.** Three or more `if` or `else` arms that pick a
@@ -55,16 +56,17 @@ A one-line helper used once makes the reader jump for nothing.
 
 ---
 
-## No layer that only passes things along
+## No layers beyond the standard ones
 
-    bad
+    good                                  bad
     ──────────────────────────────────────────────────────────────
-    class TaskService:
-        def get_task(self, task_id):
-            return self.repository.get_task(task_id)
+    route → service → query               route → controller → manager
+                                            → service → repository
+                                            → query
 
-If the service adds nothing, call the query directly. Add a layer when it
-does real work, not because a pattern says to.
+A service that only calls one query today is fine. Every request taking the
+same path through the same layers matters more than saving one file. What is
+not fine is a layer the framework file does not list.
 
 ---
 
@@ -125,7 +127,7 @@ turning it into a clear message for the user.
 
 - Is any `if` nested inside another `if` where an early return would do?
 - Is there a helper with only one caller that could sit inline?
-- Is there a class or function that only passes calls along?
+- Is there a layer that the framework file does not list?
 - Is there an option, flag or setting nobody uses yet?
 - Are there three or more branches that pick a value?
 - Is there a line you had to read twice?
