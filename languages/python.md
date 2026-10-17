@@ -19,7 +19,7 @@ Written for Python 3.12 or newer. The latest release is 3.15.
    loose strings and not a pile of flags.
 5. **Raise a named error.** Your own exception class, in its own file. Never
    `raise Exception("...")`.
-6. **Absolute imports.** `from app.tasks.task import Task`. Never relative
+6. **Absolute imports.** `from app.models.tasks.task import Task`. Never relative
    imports, never `import *`.
 7. **No mutable default arguments.** `items: list[str] | None = None`, never
    `items: list[str] = []`.
@@ -67,25 +67,34 @@ in separate files.
 
 ## Folder layout
 
-One folder per area of the work. One thing per file inside it.
+Folders are layers. Inside each layer, one folder per area. One thing per
+file. A web app follows the layers in its framework file, such as
+`frameworks/backend/fastapi.md`.
 
     project/
       pyproject.toml
       app/
         __init__.py
         main.py
-        settings.py
-        tasks/
-          __init__.py
-          task.py
-          task_status.py
+        config/
+          settings.py
+        models/
+          tasks/
+            task.py
+            task_status.py
+        services/
+          tasks/
+            create_task.py
+            close_task.py
+        errors/
           task_not_found.py
-          create_task.py
-          close_task.py
       tests/
-        tasks/
-          test_create_task.py
-          test_close_task.py
+        services/
+          tasks/
+            test_create_task.py
+            test_close_task.py
+
+The tests folder mirrors the app folder, so every test is easy to find.
 
 `__init__.py` files stay empty. Never import things into them to make a
 shorter path.
@@ -94,7 +103,7 @@ shorter path.
 
 ## A fixed set of values
 
-`app/tasks/task_status.py`
+`app/models/tasks/task_status.py`
 
 ```python
 from typing import Literal
@@ -106,13 +115,13 @@ type TaskStatus = Literal["open", "done"]
 
 ## Data inside the program
 
-`app/tasks/task.py`
+`app/models/tasks/task.py`
 
 ```python
 from dataclasses import dataclass
 from datetime import datetime
 
-from app.tasks.task_status import TaskStatus
+from app.models.tasks.task_status import TaskStatus
 
 
 @dataclass(frozen=True)
@@ -130,7 +139,7 @@ with `dataclasses.replace` instead.
 
 ## Errors
 
-`app/tasks/task_not_found.py`
+`app/errors/task_not_found.py`
 
 ```python
 class TaskNotFound(Exception):
@@ -143,12 +152,12 @@ class TaskNotFound(Exception):
 
 ## A function
 
-`app/tasks/close_task.py`
+`app/services/tasks/close_task.py`
 
 ```python
 from dataclasses import replace
 
-from app.tasks.task import Task
+from app.models.tasks.task import Task
 
 
 def close_task(task: Task) -> Task:
@@ -163,13 +172,13 @@ Bad cases first, main path last, nothing nested.
 
 ## Tests
 
-`tests/tasks/test_close_task.py`
+`tests/services/tasks/test_close_task.py`
 
 ```python
 from datetime import datetime
 
-from app.tasks.close_task import close_task
-from app.tasks.task import Task
+from app.services.tasks.close_task import close_task
+from app.models.tasks.task import Task
 
 
 def test_close_task_marks_task_done() -> None:
@@ -188,7 +197,8 @@ One test checks one thing. The name says what should happen.
     def get_tasks() -> list[Task]:        def get_tasks():
     owner: User | None                    owner: Optional[User]
     raise TaskNotFound(task_id)           raise Exception("not found")
-    from app.tasks.task import Task       from .task import *
+    from app.models.tasks.task import     from .task import *
+      Task
     tags: list[str] | None = None         tags: list[str] = []
     with open(path) as file:              file = open(path)
     f"Task {task_id}"                     "Task %s" % task_id
