@@ -8,31 +8,49 @@ Written for React 19.2.
 
 ---
 
+## The layers
+
+| Folder | Its one job | Never |
+|---|---|---|
+| `pages/` | one screen: loads what it needs and lays out components | small reusable pieces |
+| `components/` | draw something on screen, one folder per component | call the server directly |
+| `hooks/` | state and loading shared by more than one component | draw anything |
+| `services/` | talk to the backend: one request per file | React code |
+| `types/` | shapes used in more than one place | logic |
+| `styles/` | the design tokens: colours, spacing, type | component styles |
+
+---
+
 ## The rules
 
-1. **One component per file.** A function component, a named export, and a
-   file named after it.
-2. **Props have their own type, in their own file.** `TaskCardProps.ts` holds
-   `TaskCardProps`. Never a type sitting beside the component.
-3. **Components show, hooks do.** A component reads values and draws them.
-   Loading data, keeping state that many parts share and talking to the
-   server go in a hook.
-4. **Work values out, do not store them.** If a value can be worked out from
+1. **One folder per component.** `components/tasks/TaskCard/` holds
+   everything `TaskCard` needs: the component, its styles, its props type,
+   any hook only it uses, and its test.
+2. **Used by one, stays in the folder. Used by two, moves up.** A hook or
+   type that a second component needs moves to `hooks/` or `types/`.
+3. **Group component folders.** `components/ui/` for plain building blocks
+   such as buttons and dialogs. `components/<area>/` for each area of the
+   product, such as `components/tasks/`.
+4. **No `index.ts` files.** Import the file itself:
+   `@/components/tasks/TaskCard/TaskCard`.
+5. **Components show, hooks do.** A component reads values and draws them.
+   Loading data and shared state go in a hook.
+6. **Work values out, do not store them.** If a value can be worked out from
    props or state, work it out while drawing. Never copy it into its own
    state.
-5. **Effects are for the outside world only.** `useEffect` talks to things
+7. **Effects are for the outside world only.** `useEffect` talks to things
    outside React, such as a timer or a browser API. Never use it to work out
    a value or to react to a click.
-6. **Keep state close.** State lives in the lowest component that needs it.
-   Move it up only when a parent really needs it. Use context only when
-   props would pass through more than two layers that do not use them.
-7. **Lists use a real `key`.** The item's id. Never the array index.
-8. **No `useMemo`, `useCallback` or `memo` by default.** Add one only when a
-   real, measured slowness needs it, or turn on the React Compiler and let it
-   do this for you.
-9. **Colours, spacing and type come from the tokens.** Never write a colour
-   by hand in a component.
-10. **Return early for loading and errors.** The main view comes last and is
+8. **Keep state close.** State lives in the lowest component that needs it.
+   Use context only when props would pass through more than two layers that
+   do not use them.
+9. **Lists use a real `key`.** The item's id. Never the array index.
+10. **No `useMemo`, `useCallback` or `memo` by default.** Add one only for a
+    real, measured slowness, or turn on the React Compiler and let it do this
+    for you.
+11. **Colours, spacing and type come from the tokens.** Never write a colour
+    by hand in a component.
+12. **Return early for loading and errors.** The main view comes last and is
     never nested in a condition.
 
 ---
@@ -41,15 +59,17 @@ Written for React 19.2.
 
 | Thing | Example | Rule |
 |---|---|---|
-| Component | `TaskCard` | noun, `PascalCase` |
+| Component folder and file | `TaskCard/TaskCard.tsx` | noun, `PascalCase`, same name twice |
 | Props type | `TaskCardProps` | component name, then `Props` |
+| Style file | `TaskCard.module.css` | component name, then `.module.css` |
+| Test file | `TaskCard.test.tsx` | component name, then `.test` |
+| Page | `TasksPage` | what it shows, then `Page` |
 | Hook | `useTasks` | `use` then what it gives |
+| Service | `getTasks`, `createTask` | verb then noun |
 | Event prop | `onClose` | `on` then what happened |
 | Event handler | `handleClose` | `handle` then what happened |
 | Yes or no prop | `isOpen`, `hasError` | starts with `is`, `has` or `can` |
 | State pair | `[isOpen, setIsOpen]` | the value, then `set` and the value |
-| Style file | `TaskCard.module.css` | component name, then `.module.css` |
-| Context | `ThemeContext` | what it holds, then `Context` |
 
 Never name a component for how it looks: `TaskCard`, not `BlueBox`.
 
@@ -60,24 +80,40 @@ Never name a component for how it looks: `TaskCard`, not `BlueBox`.
     src/
       main.tsx
       App.tsx
+      pages/
+        TasksPage/
+          TasksPage.tsx
+          TasksPage.module.css
+      components/
+        ui/
+          Button/
+            Button.tsx
+            Button.module.css
+            ButtonProps.ts
+        tasks/
+          TaskList/
+            TaskList.tsx
+            TaskList.module.css
+          TaskCard/
+            TaskCard.tsx
+            TaskCard.module.css
+            TaskCardProps.ts
+            useIsExpanded.ts
+            TaskCard.test.tsx
+      hooks/
+        useTasks.ts
+      services/
+        getTasks.ts
+      types/
+        Task.ts
+        TaskStatus.ts
       styles/
         theme.css
-      components/
-        Button.tsx
-        ButtonProps.ts
-        Button.module.css
-      tasks/
-        Task.ts
-        getTasks.ts
-        useTasks.ts
-        TaskList.tsx
-        TaskCard.tsx
-        TaskCardProps.ts
-        TaskCard.module.css
 
-`components/` holds plain building blocks used everywhere, such as buttons
-and dialogs. Everything that belongs to one area of the product lives in that
-area's folder.
+`useIsExpanded` sits in `TaskCard/` because only `TaskCard` uses it.
+`useTasks` sits in `hooks/` because more than one component uses it.
+
+Delete a component folder and nothing it used is left behind elsewhere.
 
 ---
 
@@ -99,7 +135,7 @@ area's folder.
 This is the only file with a colour written by hand. If a colour is not here,
 it does not belong in the product.
 
-`src/tasks/TaskCard.module.css`
+`src/components/tasks/TaskCard/TaskCard.module.css`
 
 ```css
 .card {
@@ -114,16 +150,34 @@ same rule holds: no raw colour values in class names.
 
 ---
 
-## A hook that loads data
+## A service
+
+`src/services/getTasks.ts`
+
+```ts
+import { Task } from "@/types/Task";
+
+export async function getTasks() {
+  const response = await fetch("/api/tasks");
+  if (!response.ok) {
+    throw new Error(`Could not load tasks: ${response.status}`);
+  }
+  return Task.array().parse(await response.json());
+}
+```
+
+---
+
+## A shared hook
 
 In a plain React app, load server data with TanStack Query. It handles
 loading, errors, caching and refetching, which are easy to get wrong by hand.
 
-`src/tasks/useTasks.ts`
+`src/hooks/useTasks.ts`
 
 ```ts
 import { useQuery } from "@tanstack/react-query";
-import { getTasks } from "./getTasks";
+import { getTasks } from "@/services/getTasks";
 
 export function useTasks() {
   return useQuery({ queryKey: ["tasks"], queryFn: getTasks });
@@ -134,11 +188,12 @@ export function useTasks() {
 
 ## A component that uses it
 
-`src/tasks/TaskList.tsx`
+`src/components/tasks/TaskList/TaskList.tsx`
 
 ```tsx
-import { TaskCard } from "./TaskCard";
-import { useTasks } from "./useTasks";
+import { TaskCard } from "@/components/tasks/TaskCard/TaskCard";
+import { useTasks } from "@/hooks/useTasks";
+import styles from "./TaskList.module.css";
 
 export function TaskList() {
   const { data: tasks, isPending, error } = useTasks();
@@ -149,7 +204,7 @@ export function TaskList() {
     return <p>Could not load tasks</p>;
   }
   return (
-    <ul>
+    <ul className={styles.list}>
       {tasks.map((task) => (
         <TaskCard key={task.id} task={task} />
       ))}
@@ -160,36 +215,56 @@ export function TaskList() {
 
 ---
 
-## A component with props
+## A component with its own folder
 
-`src/tasks/TaskCardProps.ts`
+`src/components/tasks/TaskCard/TaskCardProps.ts`
 
 ```ts
-import type { Task } from "./Task";
+import type { Task } from "@/types/Task";
 
 export type TaskCardProps = {
   task: Task;
 };
 ```
 
-`src/tasks/TaskCard.tsx`
+`src/components/tasks/TaskCard/useIsExpanded.ts`
+
+```ts
+import { useState } from "react";
+
+export function useIsExpanded() {
+  const [isExpanded, setIsExpanded] = useState(false);
+  function handleToggle() {
+    setIsExpanded(!isExpanded);
+  }
+  return { isExpanded, handleToggle };
+}
+```
+
+`src/components/tasks/TaskCard/TaskCard.tsx`
 
 ```tsx
 import styles from "./TaskCard.module.css";
 import type { TaskCardProps } from "./TaskCardProps";
+import { useIsExpanded } from "./useIsExpanded";
 
 export function TaskCard({ task }: TaskCardProps) {
+  const { isExpanded, handleToggle } = useIsExpanded();
   const isDone = task.status === "done";
   return (
     <li className={styles.card}>
-      {task.title}
+      <button type="button" onClick={handleToggle}>
+        {task.title}
+      </button>
       {isDone && <span>Done</span>}
+      {isExpanded && <p>Created {task.createdAt.toLocaleDateString()}</p>}
     </li>
   );
 }
 ```
 
-`isDone` is worked out while drawing. It is never its own state.
+Files inside the component's own folder are imported with `./`. Everything
+outside it is imported with `@/`.
 
 ---
 
@@ -223,25 +298,32 @@ Things that happen because of a click go in the click handler.
 
     good                                  bad
     ──────────────────────────────────────────────────────────────
-    export function TaskCard              export default function Card
+    components/tasks/TaskCard/            components/TaskCard.tsx with its
+      TaskCard.tsx, its css, its props      css in styles/ and props in
+                                            types/
+    a hook one component uses, in its     every hook in hooks/
+    folder
+    @/components/tasks/TaskCard/TaskCard  @/components/tasks/TaskCard via
+                                          an index.ts
+    getTasks() in services/               fetch() inside a component
     key={task.id}                         key={index}
     {tasks.length > 0 && <TaskList />}    {tasks.length && <TaskList />}
     var(--colour-accent)                  #2459d6 in a component
-    onClose / handleClose                 closeCallback / doClose
-    isOpen                                open, opened, showFlag
     a value worked out while drawing      a value copied into state
     plain function                        useCallback around everything
-    if (isPending) return ...             a ternary three levels deep in JSX
 
 ---
 
 ## Before you commit
 
-- Is there one component per file, with its props type in its own file?
-- Does any component load data or hold shared state itself, instead of
-  through a hook?
+- Does every component have its own folder holding its component, styles,
+  props type and test?
+- Is a hook or type that only one component uses sitting outside its folder?
+  Is one that two components use still inside a component folder?
+- Is there an `index.ts` anywhere?
+- Does any component call `fetch` itself instead of through a service and
+  hook?
 - Is any state a copy of something that could be worked out?
 - Is any `useEffect` working out a value or reacting to a click?
 - Does every list use the item's id as its `key`?
-- Is there a `useMemo`, `useCallback` or `memo` with no measured reason?
 - Is there a colour, size or font written by hand outside `theme.css`?
