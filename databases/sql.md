@@ -58,8 +58,9 @@ is joined twice, name each alias for its role: `owners`, `assignees`.
       002_create_tasks.sql
       003_add_due_date_to_tasks.sql
 
-Queries the app runs live next to the code that uses them, one per file. How
-they sit in the code depends on the framework file.
+Queries the app runs live in the `queries/` layer, one per file, in a folder
+per area: `queries/tasks/selectTaskById.ts`. The framework file shows the
+full tree.
 
 ---
 
