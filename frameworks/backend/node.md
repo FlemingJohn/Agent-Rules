@@ -15,7 +15,7 @@ nothing here changes with it.
    `node:path`, `node:crypto`.
 3. **Use what Node already has.** Before adding a package, check the list
    below.
-4. **Settings are read once, in one file.** `settings.ts` reads
+4. **Settings are read once, in one file.** `config/settings.ts` reads
    `process.env`, checks it with zod and exports the result. Nothing else
    touches `process.env`.
 5. **Promises, never callbacks.** `node:fs/promises`, not `node:fs` with
@@ -26,6 +26,8 @@ nothing here changes with it.
    cannot be reached stops the app before it starts listening.
 8. **Building the app and starting it are two files.** One file makes the
    app, so tests can use it. `main.ts` starts it.
+9. **Import from `#src/`, not long relative paths.**
+   `#src/services/tasks/closeTask.ts`, never `../../services/tasks/closeTask.ts`.
 
 ---
 
@@ -80,6 +82,9 @@ Because Node runs the files as they are:
 ```json
 {
   "type": "module",
+  "imports": {
+    "#src/*": "./src/*"
+  },
   "scripts": {
     "dev": "node --env-file=.env --watch src/main.ts",
     "start": "node --env-file=.env src/main.ts",
@@ -91,9 +96,15 @@ Because Node runs the files as they are:
 
 Every project has the same four names, so anyone can run it.
 
+`"imports"` lets every file import with `#src/` instead of counting `../`.
+Node and TypeScript both understand it with no extra package.
+
 ---
 
 ## Folder layout
+
+Folders are layers. Inside each layer, one folder per area. A server built
+on Node follows the layers in `frameworks/backend/express.md`.
 
     project/
       package.json
@@ -101,17 +112,25 @@ Every project has the same four names, so anyone can run it.
       .env
       src/
         main.ts
-        settings.ts
-        tasks/
-          Task.ts
-          closeTask.ts
-          closeTask.test.ts
+        config/
+          settings.ts
+        services/
+          tasks/
+            closeTask.ts
+            closeTask.test.ts
+        schemas/
+          tasks/
+            Task.ts
+        errors/
+          NotFoundError.ts
+
+A test sits next to the file it tests.
 
 ---
 
 ## Settings
 
-`src/settings.ts`
+`src/config/settings.ts`
 
 ```ts
 import { z } from "zod";
@@ -136,12 +155,12 @@ missing setting.
 
 ## A test with the Node test runner
 
-`src/tasks/closeTask.test.ts`
+`src/services/tasks/closeTask.test.ts`
 
 ```ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { closeTask } from "./closeTask.ts";
+import { closeTask } from "#src/services/tasks/closeTask.ts";
 
 test("closeTask marks the task done", () => {
   const task = { id: 1, title: "Write plan", status: "open" as const, createdAt: new Date() };
@@ -163,12 +182,14 @@ test("closeTask marks the task done", () => {
     node --watch                          nodemon
     fetch(url)                            axios.get(url)
     import { Task } from "./Task.ts"      import { Task } from "./Task"
+    "#src/schemas/tasks/Task.ts"          "../../../schemas/tasks/Task.ts"
 
 ---
 
 ## Before you commit
 
-- Is `process.env` read anywhere other than `settings.ts`?
+- Is `process.env` read anywhere other than `config/settings.ts`?
+- Is there an import that climbs with `../../` instead of using `#src/`?
 - Is there a `Sync` call that runs during a request?
 - Did you add a package for something Node already does?
 - Does every TypeScript import end in `.ts`?
