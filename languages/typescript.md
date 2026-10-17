@@ -64,31 +64,36 @@ Run them all before every commit.
 
 ## Folder layout
 
-One folder per area of the work. One thing per file inside it.
+Folders are layers, and the framework file names them: `react.md`,
+`nextjs.md` and `express.md` each give the full tree. Inside a layer, one
+folder per area once there is more than one area. One thing per file.
 
     src/
       main.ts
-      settings.ts
-      tasks/
+      types/
         Task.ts
         TaskStatus.ts
         NewTask.ts
+      errors/
         TaskNotFoundError.ts
-        closeTask.ts
-        closeTask.test.ts
+      services/
+        tasks/
+          closeTask.ts
+          closeTask.test.ts
 
 No `types.ts`, `utils.ts` or `index.ts` files that gather other files
 together. Import each thing from its own file.
 
-Import endings follow the framework. With a bundler, as in Next.js, write
-`./Task`. When Node runs the files directly, write `./Task.ts`. See
-`frameworks/backend/node.md`.
+Import from the root alias, not long relative paths: `@/types/Task` with a
+bundler, as in Next.js, or `#src/types/Task.ts` when Node runs the files
+directly. See `frameworks/backend/node.md`. Files in the same folder are
+imported with `./`.
 
 ---
 
 ## A fixed set of values
 
-`src/tasks/TaskStatus.ts`
+`src/types/TaskStatus.ts`
 
 ```ts
 import { z } from "zod";
@@ -103,7 +108,7 @@ The schema and its type share one name. Together they are one thing.
 
 ## A shape
 
-`src/tasks/Task.ts`
+`src/types/Task.ts`
 
 ```ts
 import { z } from "zod";
@@ -113,10 +118,13 @@ export const Task = z.object({
   id: z.number(),
   title: z.string(),
   status: TaskStatus,
-  createdAt: z.date(),
+  createdAt: z.coerce.date(),
 });
 export type Task = z.infer<typeof Task>;
 ```
+
+`z.coerce.date()` accepts both a `Date` from the database and a date string
+from JSON.
 
 A shape that never comes from outside the program needs no schema:
 
@@ -131,7 +139,7 @@ export type TaskCount = {
 
 ## Errors
 
-`src/tasks/TaskNotFoundError.ts`
+`src/errors/TaskNotFoundError.ts`
 
 ```ts
 export class TaskNotFoundError extends Error {
@@ -150,10 +158,10 @@ Write fields out. Never the `constructor(public taskId: number)` shorthand.
 
 ## A function
 
-`src/tasks/closeTask.ts`
+`src/services/tasks/closeTask.ts`
 
 ```ts
-import type { Task } from "./Task";
+import type { Task } from "@/types/Task";
 
 export function closeTask(task: Task): Task {
   if (task.status === "done") {
@@ -180,7 +188,8 @@ Never change an object that was passed in. Return a new one.
     const total = 0                       var total = 0
     const tasks = await getTasks()        getTasks().then(tasks => ...)
     throw new TaskNotFoundError(id)       throw "not found"
-    import type { Task } from "./Task"    import { Task } from "./types"
+    import type { Task } from             import { Task } from "./types"
+      "@/types/Task"
     task.status === "done"                task.status == "done"
 
 ---
