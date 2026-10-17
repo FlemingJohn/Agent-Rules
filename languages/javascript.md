@@ -57,21 +57,29 @@ current browsers.
 
 ## Folder layout
 
+Folders are layers, and the framework file names them. Inside a layer, one
+folder per area. One thing per file.
+
     src/
       main.js
-      settings.js
-      tasks/
-        Task.js
-        TaskStatus.js
+      config/
+        settings.js
+      schemas/
+        tasks/
+          Task.js
+          TaskStatus.js
+      errors/
         TaskNotFoundError.js
-        closeTask.js
-        closeTask.test.js
+      services/
+        tasks/
+          closeTask.js
+          closeTask.test.js
 
 ---
 
 ## Checking outside data
 
-`src/tasks/Task.js`
+`src/schemas/tasks/Task.js`
 
 ```js
 import { z } from "zod";
@@ -95,7 +103,7 @@ knows nothing.
 
 ## A function
 
-`src/tasks/closeTask.js`
+`src/services/tasks/closeTask.js`
 
 ```js
 export function closeTask(task) {
@@ -112,6 +120,11 @@ export function closeTask(task) {
 
 Write the file ending in every import: `./Task.js`, not `./Task`. Node needs
 it for ES modules.
+
+Import across folders from the `#src/` path set up in
+`frameworks/backend/node.md`: `#src/schemas/tasks/Task.js`, never
+`../../schemas/tasks/Task.js`. Files in the same folder are imported with
+`./`.
 
 ---
 
