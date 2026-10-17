@@ -118,7 +118,7 @@ import pymysql
 from pymysql.connections import Connection
 from pymysql.cursors import DictCursor
 
-from app.settings import settings
+from app.config.settings import settings
 
 
 def get_connection() -> Iterator[Connection]:
