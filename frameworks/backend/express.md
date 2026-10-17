@@ -12,24 +12,45 @@ read.
 
 ---
 
+## The layers
+
+A request passes through the same layers every time, in this order:
+
+    request → middleware → route → service → query → database
+
+| Layer | Its one job | Never |
+|---|---|---|
+| `middleware/` | checks every request before a route: signed in, logging, errors | business rules |
+| `routes/` | read the request, check the body, call one service, send the reply | SQL, business rules |
+| `services/` | the business rules: who may do what, what must be true | `req`, `res`, status codes |
+| `queries/` | run one SQL statement and return checked data | decisions |
+| `schemas/` | the shape of data coming in and going out | logic |
+| `errors/` | named errors that services throw | logic |
+
+Each layer calls only the layer below it. A route never calls a query. A
+query never calls a service.
+
+---
+
 ## The rules
 
-1. **Thin handlers.** A handler reads the input, calls one or two functions
-   and sends the reply. About fifteen lines at most.
-2. **One router per area.** `taskRouter.ts` holds every `/tasks` route. The
-   router is the one thing in that file.
-3. **Check every body with zod.** `NewTask.parse(req.body)`. Never trust
-   `req.body` as it is.
-4. **No `try` and `catch` in handlers.** Express 5 sends any thrown error, or
-   any rejected `await`, to the error handler for you.
-5. **One error handler.** It turns known errors into the right status code,
-   and everything else into a 500.
-6. **Query functions know nothing about HTTP.** They take plain values and
-   return checked data. No `req` or `res` inside them.
-7. **SQL is plain and has parameters.** Never build a query with a template
-   string.
+1. **Thin routes.** A route reads the input, calls one service and sends the
+   reply. About fifteen lines at most. No controller files: the handler sits
+   in the route file.
+2. **Services hold the rules.** They take plain values, return data, and
+   throw a named error when something is wrong.
+3. **Queries hold one SQL statement each.** Plain SQL with parameters. Never
+   a template string with values in it.
+4. **Check every body with zod in the route.** `NewTask.parse(req.body)`.
+   Never pass `req.body` on as it is.
+5. **No `try` and `catch` in routes or services.** Express 5 sends any thrown
+   error to the error handler for you.
+6. **One error handler.** It looks up the status code for each named error
+   and sends the reply.
+7. **Inside each layer, one folder per area.** `services/tasks/createTask.ts`,
+   not one large `taskService.ts`.
 8. **`req`, `res` and `next` keep their short names.** Express uses them
-   everywhere, so they count as names the outside world already uses.
+   everywhere.
 
 ---
 
@@ -37,13 +58,17 @@ read.
 
 | Thing | Example | Rule |
 |---|---|---|
-| Router | `taskRouter` | area then `Router` |
-| Query function | `selectTaskById`, `insertTask` | starts with the SQL verb |
+| Route file | `taskRoutes.ts` exports `taskRoutes` | area then `Routes` |
+| Middleware | `checkSignedIn`, `handleError` | verb then noun |
+| Service | `getTask`, `createTask`, `closeTask` | verb then noun |
+| Query | `selectTaskById`, `insertTask` | starts with the SQL verb |
 | Query text | `SELECT_TASK_BY_ID` | the function name in `UPPER_SNAKE` |
-| Middleware | `handleError`, `checkSignedIn` | verb then noun |
+| Schema | `Task`, `NewTask` | what the data is |
+| Error | `NotFoundError`, `NotAllowedError` | what went wrong, then `Error` |
 | App builder | `makeApp` | starts with `make` |
-| Request body schema | `NewTask` | what the caller sends |
-| Reply schema | `Task` | the noun |
+
+Services and queries never share a verb, so a service can call a query
+without a name clash.
 
 Paths are plural nouns in lower case: `/tasks`, `/tasks/:taskId`.
 
@@ -57,19 +82,36 @@ Paths are plural nouns in lower case: `/tasks`, `/tasks/:taskId`.
       src/
         main.ts
         makeApp.ts
-        settings.ts
-        handleError.ts
+        config/
+          settings.ts
         database/
           pool.ts
-        tasks/
-          Task.ts
-          NewTask.ts
-          TaskStatus.ts
-          selectTaskById.ts
-          insertTask.ts
-          taskRouter.ts
+        middleware/
+          checkSignedIn.ts
+          handleError.ts
+        routes/
+          taskRoutes.ts
+        services/
+          tasks/
+            getTask.ts
+            createTask.ts
+        queries/
+          tasks/
+            selectTaskById.ts
+            insertTask.ts
+        schemas/
+          tasks/
+            Task.ts
+            NewTask.ts
+            TaskStatus.ts
+        errors/
+          NotFoundError.ts
+          NotAllowedError.ts
       migrations/
         001_create_tasks.sql
+
+Imports use the `#src/` path set up in `node.md`:
+`import { pool } from "#src/database/pool.ts"`.
 
 ---
 
@@ -79,13 +121,14 @@ Paths are plural nouns in lower case: `/tasks`, `/tasks/:taskId`.
 
 ```ts
 import express from "express";
-import { handleError } from "./handleError.ts";
-import { taskRouter } from "./tasks/taskRouter.ts";
+import { checkSignedIn } from "#src/middleware/checkSignedIn.ts";
+import { handleError } from "#src/middleware/handleError.ts";
+import { taskRoutes } from "#src/routes/taskRoutes.ts";
 
 export function makeApp() {
   const app = express();
   app.use(express.json());
-  app.use("/tasks", taskRouter);
+  app.use("/tasks", checkSignedIn, taskRoutes);
   app.use(handleError);
   return app;
 }
@@ -94,38 +137,85 @@ export function makeApp() {
 `src/main.ts`
 
 ```ts
-import { makeApp } from "./makeApp.ts";
-import { settings } from "./settings.ts";
+import { settings } from "#src/config/settings.ts";
+import { makeApp } from "#src/makeApp.ts";
 
 makeApp().listen(settings.port, () => {
   console.log(`Listening on port ${settings.port}`);
 });
 ```
 
-The error handler always goes last.
+Building and starting are two files, so tests can build the app without
+starting a server. The error handler always goes last.
 
 ---
 
-## The database pool
+## Route
 
-`src/database/pool.ts`
+`src/routes/taskRoutes.ts`
 
 ```ts
-import pg from "pg";
-import { settings } from "../settings.ts";
+import { Router } from "express";
+import { NewTask } from "#src/schemas/tasks/NewTask.ts";
+import { createTask } from "#src/services/tasks/createTask.ts";
+import { getTask } from "#src/services/tasks/getTask.ts";
 
-export const pool = new pg.Pool({ connectionString: settings.databaseUrl });
+export const taskRoutes = Router();
+
+taskRoutes.get("/:taskId", async (req, res) => {
+  const task = await getTask(Number(req.params.taskId));
+  res.json(task);
+});
+
+taskRoutes.post("/", async (req, res) => {
+  const newTask = NewTask.parse(req.body);
+  const task = await createTask(newTask);
+  res.status(201).json(task);
+});
 ```
 
 ---
 
-## Query functions
+## Service
 
-`src/tasks/selectTaskById.ts`
+`src/services/tasks/getTask.ts`
 
 ```ts
-import { pool } from "../database/pool.ts";
-import { Task } from "./Task.ts";
+import { NotFoundError } from "#src/errors/NotFoundError.ts";
+import { selectTaskById } from "#src/queries/tasks/selectTaskById.ts";
+
+export async function getTask(taskId: number) {
+  const task = await selectTaskById(taskId);
+  if (!task) {
+    throw new NotFoundError(`Task ${taskId} not found`);
+  }
+  return task;
+}
+```
+
+`src/services/tasks/createTask.ts`
+
+```ts
+import { insertTask } from "#src/queries/tasks/insertTask.ts";
+import type { NewTask } from "#src/schemas/tasks/NewTask.ts";
+
+export async function createTask(newTask: NewTask) {
+  return insertTask(newTask);
+}
+```
+
+`createTask` only calls one query today. It still exists, so every route
+takes the same path, and the next rule for creating a task has a place to go.
+
+---
+
+## Query
+
+`src/queries/tasks/selectTaskById.ts`
+
+```ts
+import { pool } from "#src/database/pool.ts";
+import { Task } from "#src/schemas/tasks/Task.ts";
 
 const SELECT_TASK_BY_ID = `
   SELECT id, title, status, created_at AS "createdAt"
@@ -143,82 +233,66 @@ export async function selectTaskById(taskId: number) {
 }
 ```
 
-`src/tasks/insertTask.ts`
+Every row goes through the zod schema, so the layers above get data they can
+trust.
+
+---
+
+## Errors
+
+`src/errors/NotFoundError.ts`
 
 ```ts
-import { pool } from "../database/pool.ts";
-import type { NewTask } from "./NewTask.ts";
-import { Task } from "./Task.ts";
-
-const INSERT_TASK = `
-  INSERT INTO tasks (title)
-  VALUES ($1)
-  RETURNING id, title, status, created_at AS "createdAt"
-`;
-
-export async function insertTask(newTask: NewTask) {
-  const result = await pool.query(INSERT_TASK, [newTask.title]);
-  return Task.parse(result.rows[0]);
+export class NotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NotFoundError";
+  }
 }
 ```
 
-Every row goes through the zod schema, so the rest of the code gets data it
-can trust.
-
----
-
-## The router
-
-`src/tasks/taskRouter.ts`
-
-```ts
-import { Router } from "express";
-import { insertTask } from "./insertTask.ts";
-import { NewTask } from "./NewTask.ts";
-import { selectTaskById } from "./selectTaskById.ts";
-
-export const taskRouter = Router();
-
-taskRouter.get("/:taskId", async (req, res) => {
-  const task = await selectTaskById(Number(req.params.taskId));
-  if (!task) {
-    res.status(404).json({ message: "Task not found" });
-    return;
-  }
-  res.json(task);
-});
-
-taskRouter.post("/", async (req, res) => {
-  const newTask = NewTask.parse(req.body);
-  const task = await insertTask(newTask);
-  res.status(201).json(task);
-});
-```
-
-If `parse` fails, it throws. Express 5 passes that to the error handler.
-
----
-
-## The error handler
-
-`src/handleError.ts`
+`src/middleware/handleError.ts`
 
 ```ts
 import type { ErrorRequestHandler } from "express";
-import { ZodError } from "zod";
+
+const STATUS_BY_ERROR_NAME = new Map([
+  ["ZodError", 400],
+  ["NotAllowedError", 403],
+  ["NotFoundError", 404],
+]);
 
 export const handleError: ErrorRequestHandler = (error, _req, res, _next) => {
-  if (error instanceof ZodError) {
-    res.status(400).json({ message: "Invalid input", issues: error.issues });
+  const status = STATUS_BY_ERROR_NAME.get(error.name);
+  if (!status) {
+    console.error(error);
+    res.status(500).json({ message: "Something went wrong" });
     return;
   }
-  console.error(error);
-  res.status(500).json({ message: "Something went wrong" });
+  res.status(status).json({ message: error.message });
 };
 ```
 
-It must take four arguments, or Express does not see it as an error
-handler.
+A new kind of error is one new line in the map. The handler must take four
+arguments, or Express does not see it as an error handler.
+
+---
+
+## Middleware
+
+`src/middleware/checkSignedIn.ts`
+
+```ts
+import type { RequestHandler } from "express";
+
+export const checkSignedIn: RequestHandler = (req, res, next) => {
+  if (!req.headers.authorization) {
+    res.status(401).json({ message: "Sign in first" });
+    return;
+  }
+  next();
+};
+```
 
 ---
 
@@ -236,22 +310,26 @@ handler.
 
     good                                  bad
     ──────────────────────────────────────────────────────────────
-    NewTask.parse(req.body)               insertTask(req.body)
-    throw, and let handleError reply      try { ... } catch (e) { res... }
+    route → service → query               route → query
+    NewTask.parse(req.body)               createTask(req.body)
+    throw new NotFoundError(...)          res.status(404) inside a service
+    let handleError reply                 try { ... } catch in a route
     WHERE id = $1                         `WHERE id = ${taskId}`
-    one taskRouter.ts per area            every route in makeApp.ts
-    selectTaskById(taskId)                selectTaskById(req)
-    res.status(404).json(...); return;    res.status(404).json(...)
-                                          res.json(task)
+    services/tasks/createTask.ts          services/taskService.ts with 20
+                                          functions
+    handler in taskRoutes.ts              a controllers/ folder
+    getTask(taskId)                       getTask(req)
     app.use(handleError) last             app.use(handleError) first
 
 ---
 
 ## Before you commit
 
-- Is every handler about fifteen lines or less?
-- Does every body go through a zod schema before it is used?
-- Is there a `try` and `catch` in a handler?
+- Does every request go middleware → route → service → query, with no layer
+  skipped or added?
+- Is every route about fifteen lines or less, with its body checked by zod?
+- Does any service use `req`, `res` or a status code?
+- Does any query make a decision?
+- Is there a `try` and `catch` in a route or service?
 - Is every query parameterised, with no template-string values?
-- Does any query function take `req` or `res`?
-- Does every early reply end with `return`?
+- Does every new error name have a line in `handleError`?
