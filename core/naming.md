@@ -36,7 +36,7 @@ shorthand.
     tasks                         data
     task                          item, obj, x
     status                        st, flag
-    task_router.py                routes2.py
+    task_routes.py                routes2.py
     TaskCard                      BlueBox
 
 ---
