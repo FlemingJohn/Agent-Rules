@@ -36,6 +36,7 @@ language file, and a language file beats a core file.
 | Working in a FastAPI app (`fastapi` in `pyproject.toml`) | `frameworks/backend/fastapi.md` |
 | Building a LangGraph graph (`langgraph` imports) | `frameworks/ai/langgraph.md` |
 | Making a git commit | `core/git.md` |
+| Recording a demo video of an app, for a hackathon or otherwise | `hackathon/demo-video.md` |
 
 A task can match more than one row. Read every row it matches, and nothing
 else.
